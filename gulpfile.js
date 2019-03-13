@@ -13,7 +13,9 @@ const postcssPresetEnv = require('postcss-preset-env');
 const del = require('del');
 const fileinclude = require('gulp-file-include');
 const gulp = require('gulp');
-const gutil = require('gulp-util');
+const beeper = require('beeper');
+const colours = require('ansi-colors');
+const log = require('fancy-log');
 const htmlmin = require('gulp-htmlmin');
 const imagemin = require('gulp-imagemin');
 const modRewrite = require('connect-modrewrite');
@@ -185,9 +187,9 @@ gulp.task(
 		'process-static-files-prod',
 	],
 	() => {
-		gutil.beep();
-		gutil.log(filesGenerated);
-		gutil.log(thankYou);
+		beeper();
+		log(filesGenerated);
+		log(thankYou);
 	},
 );
 
@@ -289,18 +291,18 @@ gulp.task('process-images', () => {
 });
 //--------------------------------------------------------------------------------------------------
 /* -------------------------------------------------------------------------------------------------
-Utilitie Tasks
+Utility Tasks
 -------------------------------------------------------------------------------------------------- */
-const swb = '\x1b[44m\x1b[1mStatic Web Build\x1b[0m';
-const swbUrl = '\x1b[2m - https://staticbuild.website/\x1b[0m';
+const swb = colours.bgBlue(colours.bold.white('Static Web Build'));
+const swbUrl = ' - ' + colours.bgWhite(colours.bold.underline.blue('https://staticbuild.website/'));
 const thankYou = 'Thank you for using the ' + swb + swbUrl;
-const errorMsg = '\x1b[41mError\x1b[0m';
+const errorMsg = colours.bgRed(colours.bold.white('Error'));
 const filesGenerated =
-	'Your distribution files are generated in: \x1b[1m' + __dirname + '/app/' + '\x1b[0m - ✅';
+	'Your distribution files are generated in: ' + colours.bold.white(__dirname + '/app/') + ' - ✅';
 
 const onError = function(err) {
-	gutil.beep();
-	console.log(swb + ' - ' + errorMsg + ' ' + err.toString());
+	beeper();
+	log(swb + ' - ' + errorMsg + ' ' + err.toString());
 	this.emit('end');
 };
 /* -------------------------------------------------------------------------------------------------
