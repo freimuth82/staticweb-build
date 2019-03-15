@@ -28,7 +28,7 @@ const uglify = require('gulp-uglify');
 /* -------------------------------------------------------------------------------------------------
 PostCSS Plugins
 -------------------------------------------------------------------------------------------------- */
-const pluginsDev = [
+const postcssPluginsDev = [
 	postcssImport,
 	postcssPresetEnv({
 		stage: 0,
@@ -39,7 +39,7 @@ const pluginsDev = [
 		},
 	}),
 ];
-const pluginsProd = [
+const postcssPluginsProd = [
 	postcssImport,
 	postcssPresetEnv({
 		stage: 0,
@@ -55,50 +55,61 @@ const pluginsProd = [
 ];
 //--------------------------------------------------------------------------------------------------
 /* -------------------------------------------------------------------------------------------------
-Header & Footer JavaScript Boundles
+Header & Footer JavaScript Bundles
 -------------------------------------------------------------------------------------------------- */
 const headerJS = ['src/etc/analytics.js', 'node_modules/aos/dist/aos.js'];
 const footerJS = ['node_modules/jquery/dist/jquery.js', 'src/assets/js/**'];
 //--------------------------------------------------------------------------------------------------
+
+/**************************************
+***** Shared Tasks
+***************************************/
+const cleanupTask = (done) => {
+	del.sync(['app/**']);
+    done();
+};
+
+const copyImagesTask = () => {
+	return gulp
+		.src('src/assets/img/**')
+		.pipe(plumber({ errorHandler: onError }))
+		.pipe(gulp.dest('app/assets/img'));
+};
+
+const copyFontsTask = () => {
+	return gulp
+		.src('src/assets/fonts/**')
+		.pipe(plumber({ errorHandler: onError }))
+		.pipe(gulp.dest('app/assets/fonts'));
+};
+
+const processImagesTask = () => {
+	return gulp
+		.src('src/assets/img/**')
+		.pipe(plumber({ errorHandler: onError }))
+		.pipe(
+			imagemin([imagemin.svgo({ plugins: [{ removeViewBox: true }] })], {
+				verbose: true,
+			}),
+		)
+		.pipe(gulp.dest('app/assets/img'));
+};
+
 /* -------------------------------------------------------------------------------------------------
 Development Tasks
 -------------------------------------------------------------------------------------------------- */
-gulp.task(
-	'build-dev',
-	[
-		'cleanup',
-		'style-dev',
-		'copy-images',
-		'copy-fonts',
-		'header-scripts-dev',
-		'footer-scripts-dev',
-		'process-static-files-dev',
-		'watch',
-	],
-	() => {
-		browserSync.init({
-			server: {
-				baseDir: 'app',
-			},
-			middleware: [modRewrite(['^.([^\\.]+)$ /$1.html [L]'])],
-		});
-	},
-);
 
-gulp.task('default');
-
-gulp.task('style-dev', () => {
+const styleDevTask = () => {
 	return gulp
 		.src('src/assets/style/main.css')
 		.pipe(plumber({ errorHandler: onError }))
 		.pipe(sourcemaps.init())
-		.pipe(postcss(pluginsDev))
+		.pipe(postcss(postcssPluginsDev))
 		.pipe(sourcemaps.write('.'))
 		.pipe(gulp.dest('app/assets/css'))
 		.pipe(browserSync.stream({ match: '**/*.css' }));
-});
-
-gulp.task('header-scripts-dev', () => {
+};
+const headerScriptsDevTask = () => {
 	return gulp
 		.src(headerJS)
 		.pipe(plumber({ errorHandler: onError }))
@@ -106,9 +117,10 @@ gulp.task('header-scripts-dev', () => {
 		.pipe(concat('top.js'))
 		.pipe(sourcemaps.write('.'))
 		.pipe(gulp.dest('app/assets/js'));
-});
+};
 
-gulp.task('footer-scripts-dev', () => {
+
+const footerScriptsDevTask = () => {
 	return gulp
 		.src(footerJS)
 		.pipe(plumber({ errorHandler: onError }))
@@ -121,9 +133,9 @@ gulp.task('footer-scripts-dev', () => {
 		.pipe(concat('bundle.js'))
 		.pipe(sourcemaps.write('.'))
 		.pipe(gulp.dest('app/assets/js'));
-});
+};
 
-gulp.task('process-static-files-dev', () => {
+const processStaticFilesDevTask = () => {
 	return gulp
 		.src(['src/*.html'])
 		.pipe(plumber({ errorHandler: onError }))
@@ -141,83 +153,108 @@ gulp.task('process-static-files-dev', () => {
 			}),
 		)
 		.pipe(gulp.dest('app'));
-});
+};
 
-gulp.task('reload-js', ['footer-scripts-dev'], function(done) {
+const reloadBrowser = (done) => {
 	browserSync.reload();
 	done();
-});
+};
 
-gulp.task('reload-images', ['copy-images'], function(done) {
-	browserSync.reload();
-	done();
-});
+const reloadJsTask = gulp.series(footerScriptsDevTask, reloadBrowser);
 
-gulp.task('reload-fonts', ['copy-fonts'], function(done) {
-	browserSync.reload();
-	done();
-});
+const reloadImagesTask = gulp.series(copyImagesTask, reloadBrowser);
 
-gulp.task('reload-files', ['process-static-files-dev'], function(done) {
-	browserSync.reload();
-	done();
-});
+const reloadFontsTask = gulp.series(copyFontsTask, reloadBrowser);
 
-gulp.task('watch', () => {
-	gulp.watch(['src/assets/style/**/*.css'], ['style-dev']);
-	gulp.watch(['src/assets/js/**'], ['reload-js']);
-	gulp.watch(['src/assets/img/**'], ['reload-images']);
-	gulp.watch(['src/assets/fonts/**'], ['reload-fonts']);
-	gulp.watch(['src/*.html', 'src/includes/**'], ['reload-files']);
-});
+const reloadFilesTask = gulp.series(processStaticFilesDevTask, reloadBrowser);
+
+const watchTask = () => {
+	gulp.watch('src/assets/style/**/*.css', gulp.parallel(styleDevTask));
+	gulp.watch('src/assets/js/**', gulp.parallel(reloadJsTask));
+	gulp.watch('src/assets/img/**', gulp.parallel(reloadImagesTask));
+	gulp.watch('src/assets/fonts/**', gulp.parallel(reloadFontsTask));
+	gulp.watch('src/*.html', gulp.parallel(reloadFilesTask));
+	gulp.watch('src/includes/**', gulp.parallel(reloadFilesTask));
+};
+
+const initBrowserSync = () => {
+    browserSync.init({
+        server: {
+            baseDir: 'app',
+        },
+        middleware: [modRewrite(['^.([^\\.]+)$ /$1.html [L]'])],
+    });
+};
+
+const buildDevTask = gulp.series(
+        cleanupTask,
+        gulp.parallel(
+            styleDevTask,
+            copyImagesTask,
+            copyFontsTask,
+            headerScriptsDevTask,
+            footerScriptsDevTask,
+            processStaticFilesDevTask
+        ),
+        gulp.parallel(
+            watchTask,
+            initBrowserSync
+        )
+    );
+
 //--------------------------------------------------------------------------------------------------
+
+/* -------------------------------------------------------------------------------------------------
+Utility Tasks
+-------------------------------------------------------------------------------------------------- */
+const swb = colours.bgBlue(colours.bold.white('Static Web Build'));
+const swbUrl = ' - ' + colours.bgWhite(colours.bold.underline.blue('https://staticbuild.website/'));
+const thankYou = 'Thank you for using the ' + swb + swbUrl;
+const errorMsg = colours.bgRed(colours.bold.white('Error'));
+const filesGenerated =
+	'Your distribution files are generated in: ' + colours.bold.white(__dirname + '/app/') + ' - ✅';
+
+const onError = (err) => {
+	beeper();
+	log(swb + ' - ' + errorMsg + ' ' + err.toString());
+	// this.emit('end');
+};
+
 /* -------------------------------------------------------------------------------------------------
 Production Tasks
 -------------------------------------------------------------------------------------------------- */
-gulp.task(
-	'build-prod',
-	[
-		'cleanup',
-		'style-prod',
-		'copy-htaccess',
-		'copy-images',
-		'copy-fonts',
-		'header-scripts-prod',
-		'footer-scripts-prod',
-		'process-static-files-prod',
-	],
-	() => {
-		beeper();
-		log(filesGenerated);
-		log(thankYou);
-	},
-);
+const thankYouNotice = (done) => {
+    done();
+	beeper();
+	log('\n\n' + filesGenerated);
+	log(thankYou);
+};
 
-gulp.task('style-prod', () => {
+const styleProdTask = () => {
 	return gulp
 		.src('src/assets/style/main.css')
 		.pipe(plumber({ errorHandler: onError }))
-		.pipe(postcss(pluginsProd))
+		.pipe(postcss(postcssPluginsProd))
 		.pipe(gulp.dest('app/assets/css'));
-});
+};
 
-gulp.task('copy-htaccess', () => {
+const copyHtaccessTask = () => {
 	return gulp
 		.src('src/etc/.htaccess')
 		.pipe(plumber({ errorHandler: onError }))
 		.pipe(gulp.dest('app'));
-});
+};
 
-gulp.task('header-scripts-prod', () => {
+const headerScriptsProdTask = () => {
 	return gulp
 		.src(headerJS)
 		.pipe(plumber({ errorHandler: onError }))
 		.pipe(concat('top.js'))
 		.pipe(uglify())
 		.pipe(gulp.dest('app/assets/js'));
-});
+};
 
-gulp.task('footer-scripts-prod', () => {
+const footerScriptsProdTask = () => {
 	return gulp
 		.src(footerJS)
 		.pipe(plumber({ errorHandler: onError }))
@@ -229,9 +266,9 @@ gulp.task('footer-scripts-prod', () => {
 		.pipe(concat('bundle.js'))
 		.pipe(uglify())
 		.pipe(gulp.dest('app/assets/js'));
-});
+};
 
-gulp.task('process-static-files-prod', () => {
+const processStaticFilesProdTask = () => {
 	return gulp
 		.src(['src/*.html'])
 		.pipe(plumber({ errorHandler: onError }))
@@ -255,56 +292,26 @@ gulp.task('process-static-files-prod', () => {
 			}),
 		)
 		.pipe(gulp.dest('app'));
-});
-//--------------------------------------------------------------------------------------------------
-/* -------------------------------------------------------------------------------------------------
-Shared Tasks
--------------------------------------------------------------------------------------------------- */
-gulp.task('cleanup', () => {
-	del.sync(['app/**']);
-});
-
-gulp.task('copy-images', () => {
-	return gulp
-		.src('src/assets/img/**')
-		.pipe(plumber({ errorHandler: onError }))
-		.pipe(gulp.dest('app/assets/img'));
-});
-
-gulp.task('copy-fonts', () => {
-	return gulp
-		.src('src/assets/fonts/**')
-		.pipe(plumber({ errorHandler: onError }))
-		.pipe(gulp.dest('app/assets/fonts'));
-});
-
-gulp.task('process-images', () => {
-	return gulp
-		.src('src/assets/img/**')
-		.pipe(plumber({ errorHandler: onError }))
-		.pipe(
-			imagemin([imagemin.svgo({ plugins: [{ removeViewBox: true }] })], {
-				verbose: true,
-			}),
-		)
-		.pipe(gulp.dest('app/assets/img'));
-});
-//--------------------------------------------------------------------------------------------------
-/* -------------------------------------------------------------------------------------------------
-Utility Tasks
--------------------------------------------------------------------------------------------------- */
-const swb = colours.bgBlue(colours.bold.white('Static Web Build'));
-const swbUrl = ' - ' + colours.bgWhite(colours.bold.underline.blue('https://staticbuild.website/'));
-const thankYou = 'Thank you for using the ' + swb + swbUrl;
-const errorMsg = colours.bgRed(colours.bold.white('Error'));
-const filesGenerated =
-	'Your distribution files are generated in: ' + colours.bold.white(__dirname + '/app/') + ' - ✅';
-
-const onError = function(err) {
-	beeper();
-	log(swb + ' - ' + errorMsg + ' ' + err.toString());
-	this.emit('end');
 };
+
+const buildProdTask = gulp.series(
+        cleanupTask,
+        gulp.parallel(
+            styleProdTask,
+            copyHtaccessTask,
+            copyImagesTask,
+            copyFontsTask,
+            headerScriptsProdTask,
+            footerScriptsProdTask,
+            processStaticFilesProdTask,
+        ),
+        thankYouNotice
+    );
+/**
+* exporting the two main tasks
+*/
+exports['build-dev'] = buildDevTask;
+exports['build-prod'] = buildProdTask;
 /* -------------------------------------------------------------------------------------------------
 End of all Tasks
 -------------------------------------------------------------------------------------------------- */
